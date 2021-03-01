@@ -7,7 +7,7 @@ on:
 
 jobs:
 
-  save-container:
+  pull-container:
     name: Tag container
     runs-on: ubuntu-20.04
     steps:
