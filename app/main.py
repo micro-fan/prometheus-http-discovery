@@ -192,7 +192,7 @@ def create_folders():
 app = Starlette(
     debug=True,
     routes=[
-        Route("/metrics/", endpoint=PrometheusView(metrics)),
+        Route("/metrics", endpoint=PrometheusView(metrics)),
     ],
     on_startup=[startup_event],
 )
