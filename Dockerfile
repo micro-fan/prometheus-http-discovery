@@ -6,7 +6,6 @@ RUN apk add --no-cache --virtual .build-deps gcc libc-dev make \
 
 COPY requirements.txt /home/
 RUN pip3 install -r /home/requirements.txt
-COPY ./run.sh /run.sh
 
 COPY ./app /app
 WORKDIR /
