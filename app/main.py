@@ -23,15 +23,16 @@ loop = asyncio.get_event_loop()
 metric_storage = MetricStorage()
 
 COLLECTOR_ERROR_COUNT = 0
-TEMP_DIR = pathlib.Path("/tmp/")
+TEMP_DIR = pathlib.Path("/tmp/discovery/")
 METRIC_COLLECTING_COUNT = "discovery_collecting_count"
 METRIC_DURATION_AVG = "discovery_duration_avg"
-CONFIG = None
+CONFIG: Optional['Config'] = None
 
 
 class ConfigDiscoveryItem(pydantic.BaseModel):
     url: pydantic.HttpUrl
     file: Optional[str] = None
+    default_labels: Dict[str, str] = {}
 
     @pydantic.root_validator
     def set_file(cls, values):
@@ -49,25 +50,17 @@ class Config(pydantic.BaseModel):
     output_dir: pathlib.Path = pathlib.Path("/results")
     discovery: Optional[List[ConfigDiscoveryItem]] = None
 
-    @pydantic.validator("output_dir")
-    def output_dir_validator(cls, v):
-        if not v:
-            raise ValueError("Output dir not set.")
-        if not str(v).startswith("/"):
-            v = pathlib.Path(f"/{v}")
-        return v
-
 
 class DiscoveryItem(pydantic.BaseModel):
     targets: List[str]
     labels: Dict[str, Any]
 
 
-def get_discovery_config() -> Config:
-    discovery_config = os.environ.get("DISCOVERY_CONFIG")
+def get_discovery_config(path: Optional[str] = None) -> Config:
+    discovery_config = path
     if not discovery_config:
         raise ValueError("DISCOVERY_CONFIG file not found.")
-    config = {
+    raw_config = {
         "interval": os.environ.get("INTERVAL", 60),
         "output_dir": pathlib.Path(os.environ.get("OUTPUT_DIR", "/results")),
         "discovery": [],
@@ -75,20 +68,25 @@ def get_discovery_config() -> Config:
     config_file = pathlib.Path(discovery_config)
     with open(config_file) as config_file:
         data = yaml.load(config_file, Loader=yaml.FullLoader)
-        discovery_urls = []
         configs = data.pop("configs", [])
         for config in configs:
             path = config.get("metrics_path")
-            targets = config.get("targets", [])
-            if path:
-                targets = [f"{target}{path}" for target in targets]
-            discovery_urls.extend(targets)
-        data["discovery"] = [{"url": url} for url in set(discovery_urls)]
-        if not data["discovery"]:
+            static_configs = config.get("static_configs") or []
+            for static_config in static_configs:
+                targets = static_config.get("targets") or []
+                if path:
+                    targets = [f"{target}{path}" for target in targets]
+                raw_config["discovery"].extend((
+                    {
+                        "url": url,
+                        "default_labels": static_config.get("labels") or {},
+                    } for url in set(targets)
+                ))
+        if not raw_config["discovery"]:
             raise ValueError("No discovery items.")
-        config.update(**data)
+        raw_config.update(**data)
     try:
-        return pydantic.parse_obj_as(Config, config)
+        return pydantic.parse_obj_as(Config, raw_config)
     except pydantic.error_wrappers.ValidationError:
         raise ValueError("Invalid config.")
 
@@ -146,6 +144,10 @@ async def discovery_collecting():
     for discovery_item in CONFIG.discovery:
         try:
             discovery_items = await fetch_discovery(discovery_item.url)
+
+            for d_item in discovery_items:
+                d_item.labels.update(discovery_item.default_labels)
+
             temp_path = pathlib.Path(f"{TEMP_DIR}/{discovery_item.file}")
             await update_discovery_file(
                 temp_path,
@@ -189,6 +191,12 @@ def create_folders():
         dir.mkdir(parents=True, exist_ok=True)
 
 
+def pre_start(config_path: str = os.environ.get("DISCOVERY_CONFIG")):
+    global CONFIG
+    CONFIG = get_discovery_config(config_path)
+    create_folders()
+
+
 app = Starlette(
     debug=True,
     routes=[
@@ -198,6 +206,5 @@ app = Starlette(
 )
 
 if __name__ == "__main__":
-    CONFIG = get_discovery_config()
-    create_folders()
+    pre_start()
     uvicorn.run(app, host="0.0.0.0")

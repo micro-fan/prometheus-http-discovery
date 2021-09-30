@@ -1,0 +1,17 @@
+output_dir: results
+interval: 120
+configs:
+  - job_name: cms
+    metrics_path: /api/v1/health/prometheus/service_discovery/
+    static_configs:
+      - targets:
+        - 'https://dev.url'
+        labels:
+          group: 'dev'
+          some_label: 'some_value'
+      - targets:
+        - 'https://prod.url'
+        labels:
+          group: 'prod'
+      - targets:
+        - 'https://without.label'

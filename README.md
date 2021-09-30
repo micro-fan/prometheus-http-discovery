@@ -20,12 +20,17 @@ docker run -e DISCOVERY_CONFIG=/discovery.yml -v /path/to/discovery.yml:/discove
 output_dir: results
 interval: 30
 configs:
-
   - job_name: my_services
     metrics_path: /metrics/service_discovery/path/
-    targets:
-      - 'http://server1.com'
-      - 'https://server2.com'
+    static_configs:
+      - targets:
+        - 'http://server1.com'
+        - 'https://server2.com'
+        labels:
+          group: 'some_group_name'
+      - targets:
+        - 'http://server3.com'
+        - 'https://server4.com'
   
   - job_name: another_services
     targets:
@@ -39,24 +44,24 @@ HTTP API response should be followed prometheus `file_sd_config` format like bel
 
 ```json
 [
-	{
-		"targets": [
-			"my_service:80",
-			"my_service_2:443"
-		],
-		"labels": {
-			"service": "web",
-            "__metrics_path__": "/metrics/path/"
-		}
-	},
-	{
-		"targets": [
-			"my_service_3:8000"
-		],
-		"labels": {
-			"service": "web_service_3"
-		}
-	}
+  {
+    "targets": [
+      "my_service:80",
+      "my_service_2:443"
+    ],
+    "labels": {
+      "service": "web",
+      "__metrics_path__": "/metrics/path/"
+    }
+  },
+  {
+    "targets": [
+      "my_service_3:8000"
+    ],
+    "labels": {
+      "service": "web_service_3"
+    }
+  }
 ]
 ```
 
